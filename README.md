@@ -30,6 +30,7 @@ Let's build a simple app. We'll ask the user to enter the width and height of a 
 
 First, let's model the state of the form:
 
+```fsharp
     type Shape = Rectangle | Ellipse
 
     type Model = {
@@ -38,14 +39,20 @@ First, let's model the state of the form:
         Shape: Shape
         Area: Result<decimal, string>
     }
+```
 
 Nice and clean. Now what events does our form have? The user can either change the size or change the shape.
+
+```fsharp
 
     type Events =
         | DimensionChanged
         | ShapeChanged of Shape
+```
 
 Now we can write a binder function that hooks up the form controls to our model properties.
+
+```fsharp
 
     let binder (form: IShapeAreaForm) model =
         let parseDecimal s =
@@ -61,6 +68,7 @@ Now we can write a binder function that hooks up the form controls to our model 
           Bind.view(<@ form.HeightInput.Text @>).toModelOneWay(<@ model.Height @>, parseDecimal)
           Bind.model(<@ model.Area @>).toViewOneWay(<@ form.AreaDisplay.Text @>, areaDisplay)
         ]
+```
 
 This defines a couple of helper functions: one to parse a string into a `decimal option` and another to convert the Area `Result` into a string for display on the label.
 
@@ -68,6 +76,7 @@ The binder then returns a list of bindings using the Bind API. A binding starts 
 
 Next, we connect form control events to our events:
 
+```fsharp
     let events (form: IShapeAreaForm) =
         [ form.WidthInput.Validated |> Observable.mapTo DimensionChanged
           form.HeightInput.Validated |> Observable.mapTo DimensionChanged
@@ -78,18 +87,24 @@ Next, we connect form control events to our events:
             |> Observable.filter (fun _ -> form.EllipseButton.Checked)
             |> Observable.mapTo (ShapeChanged Ellipse)
         ]
+```
 
 We return a list of Observables of our event type. As you can see, we can use `Observable` functions to manipulate the events from the form and convert them to our events.
 
 One last part to build: the dispatcher and event handlers. This is where our logic goes. Our `dispatcher` function will simply delegate to our handler functions.
 
+```fsharp
+
     let dispatcher = function
         | DimensionChanged -> Sync updateArea
         | ShapeChanged s -> Sync (shapeChanged s)
+```
 
 The event handlers are synchronous and simply return an updated model based on the current one.
 
 Since we bound the width and height inputs to our model, all we need to do when a size dimension is changed is re-calculate the area `Result` based on the width, height, and shape then return the model with the updated Area. We do this with a pattern match.
+
+```fsharp
 
     let updateArea model =
         let res =
@@ -100,15 +115,20 @@ Since we bound the width and height inputs to our model, all we need to do when 
             | Some _, None, _ -> Error "Missing height"
             | None, None, _ -> Error "Missing width and height"
         { model with Area = res }
+```
 
 When the shape changes, we update the Shape property on the model then update the Area.
+
+```fsharp
 
     let shapeChanged newShape model =
         { model with Shape = newShape }
         |> updateArea
+```
 
 Finally, we tie it all together with a call to `Framework.start` with an initial model.
 
+```fsharp
     let start (form: IShapeAreaForm) =
         let model = {
             Width = None
@@ -117,12 +137,16 @@ Finally, we tie it all together with a call to `Framework.start` with an initial
             Area = Error "Missing width and height"
         }
         Framework.start binder events dispatcher form model
+```
 
 ... and in Program.cs we kick things off by calling a Form `Show` extension that accepts the return value of `start` before calling `Application.Run`:
+
+```fsharp
 
     var form = new ShapeAreaForm();
     form.Show(FormLogic.start(form));
     Application.Run(form);
+```
 
 Hopefully, this simple example gives you a decent idea of how modeling your application and separating concerns this way can make your code easy to understand and maintain. It keeps Windows Forms and visual concerns out of your business logic. The Model and Events explicitly define what is on the form and how it can be interacted with.
 
